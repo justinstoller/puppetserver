@@ -19,9 +19,13 @@
   (let [debug? (or (:debug cli-data) false)]
     (if-not (contains? cli-data :config)
       {:debug debug?}
-      (-> (:config cli-data)
-          (tk-config/load-config)
-          (assoc :debug debug?)))))
+      (try
+        (-> (:config cli-data)
+            (tk-config/load-config)
+            (assoc :debug debug?))
+        (catch FileNotFoundException e
+          (throw+ {:kind :cli-error
+                   :msg (str (:config cli-data) " must exist and be readable by the current user")}))))))
 
 (defn print-message-and-exit
   [error-map exit-code]
