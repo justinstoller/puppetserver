@@ -15,6 +15,7 @@ step "(SERVER-414) Make sure puppetserver can start without puppet resource, "\
 variant = master['platform'].to_array.first
 case variant
   when /^(redhat|el|centos)$/
+    on(master, "puppetserver ca generate")
     on(master, "service puppetserver start")
     on(master, "service puppetserver status")
     on(master, "service puppetserver stop")
