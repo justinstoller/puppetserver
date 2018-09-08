@@ -14,7 +14,7 @@ step "(SERVER-414) Make sure puppetserver can start without puppet resource, "\
 
 on master, 'yum install -y git'
 on master, 'git clone git://github.com/justinstoller/puppetserver-ca-cli.git ' +
-           '-b server2304-honor-existing-master-keys /opt/puppetserver-ca'
+           '-b maint-derp-der /opt/puppetserver-ca'
 on master, 'pushd /opt/puppetserver-ca; ' +
            'sed -i "s,0.5.0,0.5.1," /opt/puppetserver-ca/lib/puppetserver/ca/version.rb; ' +
            '/opt/puppetlabs/puppet/bin/gem build puppetserver-ca.gemspec; ' +
