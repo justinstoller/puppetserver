@@ -1,4 +1,5 @@
 require 'puppet/server'
+require 'puppet/server/log_collector'
 
 module Puppet
   module Server
@@ -9,16 +10,26 @@ module Puppet
         @adapters_info = collect_adapters_info
       end
 
+      # Compiles a catalog according to the spec provided from the
+      # request.
+      # @param [Hash] request_data details about the catalog to be compiled
+      # @return [Hash] containing either just the catalog or catalog and logs,
+      #                if capturing logs was enabled
       def compile(request_data)
+        options = request_data['options'] || {}
+        # Default to capturing errors and warnings from compiles
+        options['capture_logs'] = true unless options['capture_logs']
+
         processed_hash = convert_java_args_to_ruby(request_data)
 
-        node = create_node(processed_hash)
+        catalog, logs = if options['capture_logs']
+            with_logs { compile_catalog(processed_hash) }
+          else
+            compile_catalog(request_data)
+          end
 
-        catalog = Puppet::Parser::Compiler.compile(node, processed_hash['job_id'])
+        { catalog: catalog, logs: logs }
 
-        maybe_save(processed_hash, node.facts, catalog)
-
-        catalog.to_data_hash
       end
 
       private
@@ -64,6 +75,35 @@ module Puppet
                                                   options)
 
         terminus.save(request)
+      end
+
+      def compile_catalog(request_data)
+        node = create_node(request_data)
+
+        catalog = Puppet::Parser::Compiler.compile(node, request_data['job_id'])
+
+        maybe_save(request_data, node.facts, catalog)
+
+        catalog.to_data_hash
+      end
+
+      def with_logs(&block)
+        logs = []
+        result = nil
+        log_dest = Puppet::Server::LogCollector.new(logs)
+        Puppet::Util::Log.with_destination(log_dest) do
+          result = yield
+        end
+
+        log_entries = logs.map do |log|
+          log.to_data_hash
+        end.select do |log|
+          # Filter out debug messages, which may be verbose and
+          # contain sensitive data
+          log['level'] == 'warning' || log['level'] == 'error'
+        end
+
+        return result, log_entries
       end
 
       def create_node(request_data)
