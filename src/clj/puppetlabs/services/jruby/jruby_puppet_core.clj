@@ -113,7 +113,14 @@
                                (map #(fs/file % facter-jar) ruby-load-path)))]
     (do
       (log/debug (i18n/trs "Adding facter jar to classpath from: {0}" facter-jar))
-      (ks-classpath/add-classpath facter-jar))
+      (ks-classpath/add-classpath facter-jar)
+      (let [cl (.. Thread currentThread getContextClassLoader)
+            cls (->> cl (iterate #(.getParent %)) (take-while boolean))]
+        (doseq [c cls]
+          (try
+            (log/info (str "  !!! URLS: " (java.util.Arrays/toString (.getURLs c))))
+            (catch Throwable e
+              (log/info (str "     -- Failed to getURLS on " (.toString c))))))))
     (log/info (i18n/trs "Facter jar not found in ruby load path"))))
 
 (schema/defn get-initialize-pool-instance-fn :- IFn
