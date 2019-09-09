@@ -25,11 +25,38 @@ require 'java'
 ## class simply as if it were an instance of the Java interface; thus, consuming
 ## code need not be aware of any of the JRuby implementation details.
 ##
+
+
 class Puppet::Server::Master
+
+
+
   include Java::com.puppetlabs.puppetserver.JRubyPuppet
   include Puppet::Server::Network::HTTP::Handler
 
   def initialize(puppet_config, puppet_server_config)
+    puts "Here are the ThreadLocals at Puppet Server init:"
+    thread = java.lang.Thread.currentThread
+
+    threadLocalsField = java.lang.Thread.java_class.declared_field('threadLocals')
+    threadLocalsField.accessible = true
+    threadLocalMapClass = java.lang.Class.forName('java.lang.ThreadLocal$ThreadLocalMap')
+    tableField = threadLocalMapClass.getDeclaredField("table")
+    tableField.accessible = true
+
+    table = tableField.get(threadLocalsField.to_java.get(thread))
+
+    puts "For thread Name: #{thread.name}, Id: #{thread.id}"
+    table.each do |entry|
+      if entry
+        valueField = entry.java_class.declared_field('value')
+        valueField.accessible = true
+
+        value = valueField.to_java.get(entry.to_java)
+        puts value.inspect if value
+      end
+    end
+
     # There is a setting that is routed from the puppetserver.conf to
     # configure whether or not to track hiera lookups.
     @track_lookups = puppet_server_config.delete('track_lookups')
@@ -48,6 +75,33 @@ class Puppet::Server::Master
   end
 
   def handleRequest(request)
+    locals = 0
+    puts "Here are the ThreadLocals at before handling a request:"
+    thread = java.lang.Thread.currentThread
+
+    threadLocalsField = java.lang.Thread.java_class.declared_field('threadLocals')
+    threadLocalsField.accessible = true
+    threadLocalMapClass = java.lang.Class.forName('java.lang.ThreadLocal$ThreadLocalMap')
+    tableField = threadLocalMapClass.getDeclaredField("table")
+    tableField.accessible = true
+
+    table = tableField.get(threadLocalsField.to_java.get(thread))
+
+    puts "For thread Name: #{thread.name}, Id: #{thread.id}"
+    table.each do |entry|
+      if entry
+        valueField = entry.java_class.declared_field('value')
+        valueField.accessible = true
+
+        value = valueField.to_java.get(entry.to_java)
+        if value
+          puts value.inspect
+          locals += 1
+        end
+      end
+    end
+    puts "There are #{locals} ThreadLocals in this Thread"
+
     response = {}
     Puppet.override(lookup_key_recorder: create_recorder) do
       process(request, response)
