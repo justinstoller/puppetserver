@@ -55,9 +55,11 @@
 (schema/defn handle-put-certificate-request!
   [subject :- String
    certificate-request :- InputStream
-   ca-settings :- ca/CaSettings]
+   ca-settings :- ca/CaSettings
+   report-activity-or-nil
+   request]
   (sling/try+
-    (ca/process-csr-submission! subject certificate-request ca-settings)
+    (ca/process-csr-submission! subject certificate-request ca-settings report-activity-or-nil request)
     (rr/content-type (rr/response nil) "text/plain")
     (catch ca/csr-validation-failure? {:keys [msg]}
       (log/error msg)
@@ -263,7 +265,7 @@
     (representation/ring-response)))
 
 (defresource certificate-status
-  [subject settings]
+  [subject settings report-activity-or-nil]
   :allowed-methods [:get :put :delete]
 
   :available-media-types media-types
@@ -366,12 +368,15 @@
 
   :put!
   (fn [context]
-     (let [desired-state (get-desired-state context)]
-       (locking crl-write-serializer
-         (ca/set-certificate-status!
-          (merge-request-settings settings context)
-          subject
-          desired-state))
+     (let [desired-state (get-desired-state context)
+           request (:request context)]
+       (locking crl-write-serializer          
+          (ca/set-certificate-status!
+            (merge-request-settings settings context)
+            subject
+            desired-state
+            report-activity-or-nil
+            request))
        (-> context
          (assoc-in [:representation :media-type] "text/plain")))))
 
@@ -395,11 +400,11 @@
         (as-json-or-pson context)))))
 
 (schema/defn ^:always-validate web-routes :- bidi-schema/RoutePair
-  [ca-settings :- ca/CaSettings]
+  [ca-settings :- ca/CaSettings report-activity-or-nil]
   (comidi/routes
     (comidi/context ["/v1"]
       (ANY ["/certificate_status/" :subject] [subject]
-        (certificate-status subject ca-settings))
+          (certificate-status subject ca-settings report-activity-or-nil))
       (comidi/context ["/certificate_statuses/"]
         (ANY [[#"[^/]+" :ignored-but-required]] request
           (certificate-statuses request ca-settings))
@@ -410,7 +415,12 @@
         (GET [""] [subject]
           (handle-get-certificate-request subject ca-settings))
         (PUT [""] [subject :as {body :body}]
-          (handle-put-certificate-request! subject body ca-settings))
+          (fn [context]
+            (let [request (:request context)]
+              (handle-put-certificate-request! subject body ca-settings report-activity-or-nil request)
+            )
+          )
+        )
         (DELETE [""] [subject]
           (handle-delete-certificate-request! subject ca-settings)))
       (GET ["/certificate_revocation_list/" :ignored-node-name] request

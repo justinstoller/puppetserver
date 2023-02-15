@@ -1243,13 +1243,42 @@
         combined-list (vec (concat base-ext-list csr-ext-list))]
     (ensure-ext-list-has-cn-san subject combined-list)))
 
+(defn report-successful-cert-signing
+  "Log message and report to the activity service if available about successful cert signing."
+  [report-activity-or-nil message subject certname ip-address]
+  (let [commit {:service {:id "puppet-ca"}
+                :subject {:id subject
+                          :name subject
+                          :type "users"}
+                :objects [{:type "node" :id certname :name certname}]
+                :events [{:type "sign-certificate"
+                          :what "node"
+                          :description (str "certificate_successfully_signed")
+                          :message message}]
+                :ip_address ip-address}]
+    (log/info message)
+    (if report-activity-or-nil
+      (report-activity-or-nil {:commit commit}))))
+
+(defn generate-cert-message-from-request
+  "Extract params from request and create successful cert signing message.
+  Returns message, subject, certname and ip address"
+  [request certname]
+  (let [auth-name (get-in request [:authorization :name])
+        rbac-subject (:rbac-subject request)
+        ip-address (:remote-addr request)
+        signee (or rbac-subject auth-name "CA")]
+    [(i18n/trs "Entity {0} signed cert for host {1}." signee certname) signee certname ip-address]))      
+
 (schema/defn ^:always-validate
   autosign-certificate-request!
   "Given a subject name, their certificate request, and the CA settings
   from Puppet, auto-sign the request and write the certificate to disk."
   [subject :- schema/Str
    csr :- CertificateRequest
-   {:keys [cacert cakey signeddir ca-ttl serial cert-inventory]} :- CaSettings]
+   {:keys [cacert cakey signeddir ca-ttl serial cert-inventory]} :- CaSettings
+   report-activity-or-nil
+   request]
   (let [validity    (cert-validity-dates ca-ttl)
         ;; if part of a CA bundle, the intermediate CA will be first in the chain
         cacert      (utils/pem->ca-cert cacert cakey)
@@ -1263,8 +1292,9 @@
                                             (utils/get-public-key csr)
                                             (create-agent-extensions
                                              csr
-                                             cacert))]
-    (log/info (i18n/trs "Signed certificate request for {0}" subject))
+                                             cacert))
+        [msg signee certname ip] (generate-cert-message-from-request request subject)]
+    (report-successful-cert-signing report-activity-or-nil msg signee certname ip)
     (write-cert-to-inventory! signed-cert cert-inventory)
     (write-cert signed-cert (path-to-cert signeddir subject))))
 
@@ -1361,7 +1391,9 @@
    Throws a slingshot exception if the CSR is invalid."
   [subject :- schema/Str
    certificate-request :- InputStream
-   {:keys [autosign csrdir ruby-load-path gem-path allow-subject-alt-names allow-authorization-extensions] :as settings} :- CaSettings]
+   {:keys [autosign csrdir ruby-load-path gem-path allow-subject-alt-names allow-authorization-extensions] :as settings} :- CaSettings
+   report-activity-or-nil
+   request]
   (with-open [byte-stream (-> certificate-request
                               input-stream->byte-array
                               ByteArrayInputStream.)]
@@ -1375,7 +1407,7 @@
         (ensure-no-authorization-extensions! csr allow-authorization-extensions)
         (validate-extensions! (utils/get-extensions csr))
         (validate-csr-signature! csr)
-        (autosign-certificate-request! subject csr settings)
+        (autosign-certificate-request! subject csr settings report-activity-or-nil request)
         (fs/delete (path-to-cert-request csrdir subject))))))
 
 (schema/defn ^:always-validate delete-certificate-request! :- OutcomeInfo
@@ -1660,9 +1692,11 @@
 (schema/defn sign-existing-csr!
   "Sign the subject's certificate request."
   [{:keys [csrdir] :as settings} :- CaSettings
-   subject :- schema/Str]
+   subject :- schema/Str
+   report-activity-or-nil
+   request]
   (let [csr-path (path-to-cert-request csrdir subject)]
-    (autosign-certificate-request! subject (utils/pem->csr csr-path) settings)
+    (autosign-certificate-request! subject (utils/pem->csr csr-path) settings report-activity-or-nil request)
     (fs/delete csr-path)
     (log/debug (i18n/trs "Removed certificate request for {0} at ''{1}''" subject csr-path))))
 
@@ -1727,9 +1761,11 @@
   "Sign or revoke the certificate for the given subject."
   [settings :- CaSettings
    subject :- schema/Str
-   desired-state :- DesiredCertificateState]
+   desired-state :- DesiredCertificateState
+   report-activity-or-nil
+   request]
   (if (= :signed desired-state)
-    (sign-existing-csr! settings subject)
+    (sign-existing-csr! settings subject report-activity-or-nil request)
     (revoke-existing-certs! settings [subject])))
 
 (schema/defn ^:always-validate certificate-exists? :- schema/Bool
