@@ -20,11 +20,7 @@
    [clj-time.format :as time-format]
    [clj-time.core :as time]
    [puppetlabs.trapperkeeper.services :as tk-services]
-  ;;  [puppetlabs.rbac-client.testutils.dummy-activity-service :refer [dummy-activity]]
-  ;;  [puppetlabs.rbac-client.testutils.dummy-rbac-service :refer [dummy-rbac]]
-  ;; [puppetlabs.rbac-client.protocols.activity :refer [ActivityReportingService]]
-  [puppetlabs.rbac-client.testutils.dummy-rbac-service :refer [dummy-rbac-service]]
-  [puppetlabs.rbac-client.testutils.dummy-activity-service :refer [dummy-activity-service]])
+   [puppetlabs.rbac-client.testutils.dummy-activity-service :refer [dummy-activity-service]])
   (:import (javax.net.ssl SSLException)))
 
 (def test-resources-dir
@@ -608,11 +604,6 @@
            (is (= 204 (:status response)))
            (is (not (fs/exists? saved-csr)))))
        (fs/delete csr-file)))))
-
-
-;; (def bootstrap-services
-;; [dummy-rbac-service
-;;   dummy-activity-service])
 
 (deftest csr-api-test2
   (let [test-service (tk-services/service
