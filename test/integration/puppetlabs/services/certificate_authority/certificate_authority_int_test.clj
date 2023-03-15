@@ -617,11 +617,9 @@
 (deftest csr-api-test2
 
 (let [test-service (tk-services/service
-  [[:ActivityReportingService report-activity!]]
-  (init [this context]
-        (report-activity! [["service" "commit"]
-            [true]])
-        context))]
+                      [[:ActivityReportingService report-activity!]]
+                      (init [this context]
+                            context))]
 
   (testutils/with-stub-puppet-conf
       (bootstrap/with-puppetserver-running-with-services
