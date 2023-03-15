@@ -53,13 +53,14 @@
       (rr/content-type "text/plain")))
 
 (schema/defn handle-put-certificate-request!
-  [subject :- String
-   certificate-request :- InputStream
-   ca-settings :- ca/CaSettings
+  [ca-settings :- ca/CaSettings
    report-activity-or-nil
-   request]
+   {:keys [body] {:keys [subject]} :route-params :as request}]
   (sling/try+
-    (ca/process-csr-submission! subject certificate-request ca-settings report-activity-or-nil request)
+    (prn (str "This is the report-activity-or-nil " report-activity-or-nil))
+    (prn (str "This is the body " body))
+    (prn (str "This is the subject " subject))
+    (ca/process-csr-submission! subject body ca-settings report-activity-or-nil request)
     (rr/content-type (rr/response nil) "text/plain")
     (catch ca/csr-validation-failure? {:keys [msg]}
       (log/error msg)
@@ -368,6 +369,7 @@
 
   :put!
   (fn [context]
+    (prn context)
      (let [desired-state (get-desired-state context)
            request (:request context)]
        (locking crl-write-serializer          
@@ -400,7 +402,8 @@
         (as-json-or-pson context)))))
 
 (schema/defn ^:always-validate web-routes :- bidi-schema/RoutePair
-  [ca-settings :- ca/CaSettings report-activity-or-nil]
+  [ca-settings :- ca/CaSettings
+   report-activity-or-nil]
   (comidi/routes
     (comidi/context ["/v1"]
       (ANY ["/certificate_status/" :subject] [subject]
@@ -414,13 +417,8 @@
       (comidi/context ["/certificate_request/" :subject]
         (GET [""] [subject]
           (handle-get-certificate-request subject ca-settings))
-        (PUT [""] [subject :as {body :body}]
-          (fn [context]
-            (let [request (:request context)]
-              (handle-put-certificate-request! subject body ca-settings report-activity-or-nil request)
-            )
-          )
-        )
+        (PUT [""] request
+          (handle-put-certificate-request! ca-settings report-activity-or-nil request))
         (DELETE [""] [subject]
           (handle-delete-certificate-request! subject ca-settings)))
       (GET ["/certificate_revocation_list/" :ignored-node-name] request

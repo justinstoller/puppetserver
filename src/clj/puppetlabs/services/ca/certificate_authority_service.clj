@@ -37,7 +37,9 @@
           infra-nodes-file (.getCanonicalPath (fs/file (str (fs/parent ca-crl-file) "/infra_inventory.txt")))
           watcher (create-watcher {:recursive false})
           report-activity-or-nil (if-let [activity-reporting-service (maybe-get-service this :ActivityReportingService)]
-                                    (partial activity-proto/report-activity! activity-reporting-service))
+                                   (do
+                                     (prn "It works!?!?!")
+                                    (partial activity-proto/report-activity! activity-reporting-service)))
           ]
       (ca/validate-settings! settings)
       (ca/initialize! settings)

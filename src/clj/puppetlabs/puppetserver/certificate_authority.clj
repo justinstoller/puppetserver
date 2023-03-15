@@ -1279,6 +1279,8 @@
    {:keys [cacert cakey signeddir ca-ttl serial cert-inventory]} :- CaSettings
    report-activity-or-nil
    request]
+  (prn "autosigning!!!")
+  (prn report-activity-or-nil)
   (let [validity    (cert-validity-dates ca-ttl)
         ;; if part of a CA bundle, the intermediate CA will be first in the chain
         cacert      (utils/pem->ca-cert cacert cakey)

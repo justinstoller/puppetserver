@@ -20,6 +20,7 @@
    [clj-time.format :as time-format]
    [clj-time.core :as time]
    [puppetlabs.trapperkeeper.services :as tk-services]
+   [puppetlabs.rbac-client.protocols.activity :as act-proto]
    [puppetlabs.rbac-client.testutils.dummy-activity-service :refer [dummy-activity-service]])
   (:import (javax.net.ssl SSLException)))
 
@@ -606,14 +607,17 @@
        (fs/delete csr-file)))))
 
 (deftest csr-api-test2
-  (let [test-service (tk-services/service
-                        [[:ActivityReportingService report-activity!]]
-                        (init [this context]
-                              context))]
+  (let [reported-activity (atom [])
+        test-service (tk-services/service
+                        act-proto/ActivityReportingService
+                        []
+                        (report-activity! [_this body]
+                          (prn "I've been called!!!!")
+                          (swap! reported-activity conj body)))]
     (testutils/with-stub-puppet-conf
         (bootstrap/with-puppetserver-running-with-services
           app
-          (concat (bootstrap/services-from-dev-bootstrap) [test-service dummy-activity-service])
+          (concat (bootstrap/services-from-dev-bootstrap) [test-service])
           (bootstrap/load-dev-config-with-overrides
           {:jruby-puppet
             {:gem-path [(ks/absolute-path jruby-testutils/gem-path)]}
@@ -639,15 +643,24 @@
               (let [response (http-client/put
                               url
                               (merge request-opts {:body (slurp csr-file)}))]
+                ;; Doesn't actually exercise the behavior but good to know our setup is correct
                 (is (= 200 (:status response)))
                 (is (= (slurp csr-file) (slurp saved-csr)))))
 
-            (testing "delete a CSR via the API"
-              (let [response (http-client/delete
-                              url
-                              request-opts)]
+            (testing "Sign the waiting CSR"
+              (let [response (http-client/put
+                              "https://localhost:8140/puppet-ca/v1/certificate_status/test_cert"
+                              (merge request-opts {:body "{\"desired_state\": \"signed\"}"
+                                                   :headers {"content-type" "application/json"}}))]
+                (is (= 200 (:status response)))
+                (is (= "Expected signed content activity commit" (first @reported-activity)))
+                (is (= 1 (count @reported-activity)))))
+
+            (testing "DON'T delete a CSR via the API, revoke the cert"
+              (let [response {}]
                 (is (= 204 (:status response)))
-                (is (not (fs/exists? saved-csr)))))
+                (is (= "Expected revoked content activity commit" (last @reported-activity)))
+                (is (= 2 (count @reported-activity)))))
 
             (fs/delete csr-file))))))
 
