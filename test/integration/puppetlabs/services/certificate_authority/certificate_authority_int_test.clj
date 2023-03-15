@@ -615,55 +615,50 @@
 ;;   dummy-activity-service])
 
 (deftest csr-api-test2
+  (let [test-service (tk-services/service
+                        [[:ActivityReportingService report-activity!]]
+                        (init [this context]
+                              context))]
+    (testutils/with-stub-puppet-conf
+        (bootstrap/with-puppetserver-running-with-services
+          app
+          (bootstrap/services-from-dev-bootstrap)
+          (bootstrap/load-dev-config-with-overrides
+          {:jruby-puppet
+            {:gem-path [(ks/absolute-path jruby-testutils/gem-path)]}
+            :webserver
+            {:ssl-cert (str bootstrap/server-conf-dir "/ssl/certs/localhost.pem")
+            :ssl-key (str bootstrap/server-conf-dir "/ssl/private_keys/localhost.pem")
+            :ssl-ca-cert (str bootstrap/server-conf-dir "/ca/ca_crt.pem")
+            :ssl-crl-path (str bootstrap/server-conf-dir "/ssl/crl.pem")}})
+          (let [request-dir (str bootstrap/server-conf-dir "/ca/requests")
+                key-pair (ssl-utils/generate-key-pair)
+                subjectDN (ssl-utils/cn "test_cert")
+                csr (ssl-utils/generate-certificate-request key-pair subjectDN)
+                csr-file (ks/temp-file "test_csr.pem")
+                saved-csr (str request-dir "/test_cert.pem")
+                url "https://localhost:8140/puppet-ca/v1/certificate_request/test_cert"
+                request-opts {:ssl-cert (str bootstrap/server-conf-dir "/ca/ca_crt.pem")
+                              :ssl-key (str bootstrap/server-conf-dir "/ca/ca_key.pem")
+                              :ssl-ca-cert (str bootstrap/server-conf-dir "/ca/ca_crt.pem")
+                              :as :text
+                              :headers {"content-type" "text/plain"}}]
+            (ssl-utils/obj->pem! csr csr-file)
+            (testing "submit a CSR via the API"
+              (let [response (http-client/put
+                              url
+                              (merge request-opts {:body (slurp csr-file)}))]
+                (is (= 200 (:status response)))
+                (is (= (slurp csr-file) (slurp saved-csr)))))
 
-(let [test-service (tk-services/service
-                      [[:ActivityReportingService report-activity!]]
-                      (init [this context]
-                            context))]
+            (testing "delete a CSR via the API"
+              (let [response (http-client/delete
+                              url
+                              request-opts)]
+                (is (= 204 (:status response)))
+                (is (not (fs/exists? saved-csr)))))
 
-  (testutils/with-stub-puppet-conf
-      (bootstrap/with-puppetserver-running-with-services
-        app
-        (conj (bootstrap/services-from-dev-bootstrap)
-             test-service)
-        (bootstrap/load-dev-config-with-overrides
-        {:jruby-puppet
-          {:gem-path [(ks/absolute-path jruby-testutils/gem-path)]}
-          :webserver
-          {:ssl-cert (str bootstrap/server-conf-dir "/ssl/certs/localhost.pem")
-          :ssl-key (str bootstrap/server-conf-dir "/ssl/private_keys/localhost.pem")
-          :ssl-ca-cert (str bootstrap/server-conf-dir "/ca/ca_crt.pem")
-          :ssl-crl-path (str bootstrap/server-conf-dir "/ssl/crl.pem")}})
-        (let [request-dir (str bootstrap/server-conf-dir "/ca/requests")
-              key-pair (ssl-utils/generate-key-pair)
-              subjectDN (ssl-utils/cn "test_cert")
-              csr (ssl-utils/generate-certificate-request key-pair subjectDN)
-              csr-file (ks/temp-file "test_csr.pem")
-              saved-csr (str request-dir "/test_cert.pem")
-              url "https://localhost:8140/puppet-ca/v1/certificate_request/test_cert"
-              request-opts {:ssl-cert (str bootstrap/server-conf-dir "/ca/ca_crt.pem")
-                            :ssl-key (str bootstrap/server-conf-dir "/ca/ca_key.pem")
-                            :ssl-ca-cert (str bootstrap/server-conf-dir "/ca/ca_crt.pem")
-                            :as :text
-                            :headers {"content-type" "text/plain"}}]
-          (ssl-utils/obj->pem! csr csr-file)
-          (testing "submit a CSR via the API"
-            (let [response (http-client/put
-                            url
-                            (merge request-opts {:body (slurp csr-file)}))]
-              (is (= 200 (:status response)))
-              (is (= (slurp csr-file) (slurp saved-csr)))))
-
-          (testing "delete a CSR via the API"
-            (let [response (http-client/delete
-                            url
-                            request-opts)]
-              (is (= 204 (:status response)))
-              (is (not (fs/exists? saved-csr)))))
-
-          (fs/delete csr-file))))
-          )
-)
+            (fs/delete csr-file))))))
 
 (deftest ca-expirations-endpoint-test
   (testing "returns expiration dates for all CA certs and CRLs"
