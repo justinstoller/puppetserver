@@ -622,7 +622,7 @@
     (testutils/with-stub-puppet-conf
         (bootstrap/with-puppetserver-running-with-services
           app
-          (bootstrap/services-from-dev-bootstrap)
+          (concat (bootstrap/services-from-dev-bootstrap) [test-service dummy-activity-service])
           (bootstrap/load-dev-config-with-overrides
           {:jruby-puppet
             {:gem-path [(ks/absolute-path jruby-testutils/gem-path)]}
