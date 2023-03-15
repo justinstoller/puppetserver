@@ -10,9 +10,8 @@
             [puppetlabs.comidi :as comidi]
             [puppetlabs.i18n.core :as i18n]
             [puppetlabs.trapperkeeper.services.status.status-core :as status-core]
-            [puppetlabs.rbac-client.protocols.activity :refer [ActivityReportingService]]
-            [puppetlabs.trapperkeeper.services :refer [maybe-get-service]]
-            [puppetlabs.rbac-client.protocols.activity :refer [report-activity!]]))
+            [puppetlabs.rbac-client.protocols.activity :refer [ActivityReportingService] :as activity-proto]
+            [puppetlabs.trapperkeeper.services :refer [maybe-get-service]]))
 
 (tk/defservice certificate-authority-service
   CaService
@@ -38,7 +37,7 @@
           infra-nodes-file (.getCanonicalPath (fs/file (str (fs/parent ca-crl-file) "/infra_inventory.txt")))
           watcher (create-watcher {:recursive false})
           report-activity-or-nil (if-let [activity-reporting-service (maybe-get-service this :ActivityReportingService)]
-                                    (partial report-activity! activity-reporting-service))
+                                    (partial activity-proto/report-activity! activity-reporting-service))
           ]
       (ca/validate-settings! settings)
       (ca/initialize! settings)
