@@ -111,6 +111,7 @@ EOM
     query = "curl -k https://localhost:8140/status/v1/services/puppet-profiler?level=debug"
     response = JSON.parse(on(master, query).stdout.chomp)
     pdb_metrics = response['status']['experimental']['puppetdb-metrics']
+    puts pdb_metrics
 
     # NOTE: If these tests fail, then likely someone changed a metric
     # name passed to Puppet::Util::Profiler.profile over in the Ruby
@@ -122,9 +123,9 @@ EOM
       report_convert_to_wire_format_hash command_submit_store_report
       resource_search query
     ].each do |metric_name|
-      metric_data = pdb_metrics.find({}) {|m| m['metric'] == metric_name }
+      metric_data = pdb_metrics.find {|m| m['metric'] == metric_name }
 
-      assert_operator(metric_data.fetch('count', 0), :>, 0,
+      assert_operator(Hash(metric_data).fetch('count', 0), :>, 0,
                       "PuppetDB metrics recorded for: #{metric_name}")
     end
   end

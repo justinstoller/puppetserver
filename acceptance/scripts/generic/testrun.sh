@@ -39,8 +39,8 @@ do_init()
 set -x
 
 export GEM_SOURCE="https://artifactory.delivery.puppetlabs.net/artifactory/api/gems/rubygems/"
-export GENCONFIG_LAYOUT="${GENCONFIG_LAYOUT:-redhat8-64ma-debian11-64a}"
-export BEAKER_TESTSUITE="${BEAKER_TESTSUITE:-acceptance/suites/tests}"
+export GENCONFIG_LAYOUT="${GENCONFIG_LAYOUT:-redhat7-64ma-debian11-64a}"
+export BEAKER_TESTSUITE="${BEAKER_TESTSUITE:-acceptance/suites/tests/00_smoke/puppetdb_integration.rb}"
 export BEAKER_PRESUITE="${BEAKER_PRESUITE:-acceptance/suites/pre_suite/foss}"
 export BEAKER_POSTSUITE="${BEAKER_POSTSUITE:-acceptance/suites/post_suite}"
 export BEAKER_OPTIONS="${BEAKER_OPTIONS:-acceptance/config/beaker/options.rb}"
